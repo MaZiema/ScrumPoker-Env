@@ -1,0 +1,74 @@
+﻿@page "/"
+@rendermode InteractiveServer
+@inject NavigationManager Navigation
+
+<PageTitle>Scrum Poker</PageTitle>
+
+<div class="container-fluid home-container">
+    <div class="card shadow">
+        <div class="card-body">
+            <h1 class="card-title text-center mb-4">Scrum Poker</h1>
+
+                    <!-- Raum erstellen -->
+                    <div class="mb-4">
+                        <h5>Neuen Raum erstellen</h5>
+                        <div class="mb-3">
+                            <label class="form-label">Dein Name (Admin)</label>
+                            <input @bind="AdminName" @bind:event="oninput" class="form-control" maxlength="12"
+                                   placeholder="Name" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Raumname</label>
+                            <input @bind="RoomName" @bind:event="oninput" class="form-control" maxlength="12"
+                                   placeholder="Raumname" />
+                        </div>
+                        <button class="btn btn-primary w-100" @onclick="CreateRoom"
+                                disabled="@(IsCreating || string.IsNullOrWhiteSpace(RoomName) || string.IsNullOrWhiteSpace(AdminName))">
+                            @if (IsCreating)
+                            {
+                                <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                            }
+                            Raum erstellen & beitreten
+                        </button>
+                    </div>
+
+                    <hr />
+
+                    <!-- Raum beitreten -->
+                    <div class="mt-4">
+                        <h5>Raum beitreten</h5>
+                        <div class="mb-3">
+                            <label class="form-label">Raum-Code</label>
+                            <input @bind="JoinCode" @bind:event="oninput" class="form-control"
+                                   placeholder="Code vom Admin erhalten..." />
+                        </div>
+                        <button class="btn btn-outline-secondary w-100" @onclick="JoinRoom"
+                                disabled="@(string.IsNullOrWhiteSpace(JoinCode))">
+                            Raum beitreten
+                        </button>
+                    </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private string AdminName = "";
+    private string RoomName = "";
+    private string JoinCode = "";
+    private bool IsCreating;
+
+    private void CreateRoom()
+    {
+        if (string.IsNullOrWhiteSpace(RoomName) || string.IsNullOrWhiteSpace(AdminName)) return;
+        if (IsCreating) return;
+
+        IsCreating = true;
+        Navigation.NavigateTo($"/room?name={Uri.EscapeDataString(AdminName.Trim())}&roomName={Uri.EscapeDataString(RoomName.Trim())}&role=Admin");
+    }
+
+    private void JoinRoom()
+    {
+        if (string.IsNullOrWhiteSpace(JoinCode)) return;
+        Navigation.NavigateTo($"/join/{JoinCode.Trim().ToUpper()}");
+    }
+}

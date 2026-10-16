@@ -1,0 +1,10 @@
+C:\ScrumPoker\app\Scrum_Poker_V1.exe
+C:\ScrumPoker\app\appsettings.Development.json
+C:\ScrumPoker\app\appsettings.json
+C:\ScrumPoker\app\Scrum_Poker_V1.dll
+C:\ScrumPoker\app\Scrum_Poker_V1.deps.json
+C:\ScrumPoker\app\Scrum_Poker_V1.runtimeconfig.json
+C:\ScrumPoker\app\Scrum_Poker_V1.pdb
+C:\ScrumPoker\app\Microsoft.AspNetCore.Http.Connections.Client.dll
+C:\ScrumPoker\app\Microsoft.AspNetCore.SignalR.Client.dll
+C:\ScrumPoker\app\Microsoft.AspNetCore.SignalR.Client.Core.dll

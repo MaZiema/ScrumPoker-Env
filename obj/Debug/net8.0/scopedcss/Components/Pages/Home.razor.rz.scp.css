@@ -1,0 +1,8 @@
+[b-pcqzgusbix] .card {
+    max-width: 500px;
+    width: 100%;
+}
+
+[b-pcqzgusbix] .card-title {
+    white-space: nowrap;
+}

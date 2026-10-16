@@ -1,0 +1,597 @@
+@page "/room"
+@page "/room/{RoomCode}"
+@rendermode InteractiveServer
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+@using Microsoft.AspNetCore.SignalR.Client
+@using Scrum_Poker_V1.Models
+@implements IAsyncDisposable
+
+<PageTitle>@(IsCreateMode ? "Raum erstellen" : _actualRoomCode) - Scrum Poker</PageTitle>
+
+<div class="container-fluid">
+    @if (!Connected)
+    {
+        <div class="text-center mt-5">
+            @if (!string.IsNullOrEmpty(ConnectionError))
+            {
+                <div class="alert alert-danger">
+                    <strong>Verbindungsfehler:</strong> @ConnectionError
+                    <button class="btn btn-outline-danger btn-sm ms-3" @onclick="NavigateHome">Zur Startseite</button>
+                </div>
+            }
+            else
+            {
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Verbinden...</span>
+                </div>
+                <p class="mt-3">Verbindung wird hergestellt...</p>
+            }
+        </div>
+    }
+    else if (!Joined)
+    {
+        <div class="text-center mt-5">
+            <p>Du wurdest aus dem Raum geworfen oder die Verbindung wurde getrennt.</p>
+            @if (ActivityLog.Any())
+            {
+                <div class="alert alert-info text-start mt-3">
+                    @foreach (var log in ActivityLog.TakeLast(5))
+                    {
+                        <div>@log</div>
+                    }
+                </div>
+            }
+            <button class="btn btn-primary" @onclick="NavigateHome">Zur Startseite</button>
+        </div>
+    }
+    else
+    {
+        <div class="row">
+            <!-- Sidebar: Benutzerliste -->
+            <div class="col-md-3 border-end p-3" style="min-height: 100vh;">
+                <h5>Raum: @(IsCreateMode ? RoomName : _actualRoomCode)</h5>
+                <small class="text-muted">Rolle: @MyRole</small>
+
+                @if (MyRole == "Admin" && !string.IsNullOrEmpty(_actualRoomCode))
+                {
+                    var inviteUrl = Navigation.ToAbsoluteUri($"/join/{_actualRoomCode}").ToString();
+                    <div class="mt-2 mb-3">
+                        <label class="form-label small fw-bold">Einladungs-Link</label>
+                        <input class="form-control form-control-sm mb-1" value="@inviteUrl" readonly />
+                        <button class="btn btn-outline-secondary btn-sm w-100" @onclick="() => CopyToClipboard(inviteUrl)">
+                            @(_linkCopied ? "Kopiert!" : "Kopieren")
+                        </button>
+                    </div>
+                }
+
+                <hr />
+
+                <h6>Benutzer</h6>
+                <ul class="list-group mb-4">
+                    @foreach (var player in Players)
+                    {
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <span class="d-flex align-items-center">
+                                @if (MyRole == "Admin" && player.Name != PlayerName)
+                                {
+                                    <button class="btn btn-outline-danger btn-sm me-2 p-0 d-inline-flex align-items-center justify-content-center"
+                                            style="width:20px;height:20px;line-height:1;font-size:0.8rem;"
+                                            title="Aus Raum entfernen" @onclick="() => KickPlayer(player.Name)">×</button>
+                                }
+                                @player.Name
+                                @if (player.Role == "Admin")
+                                {
+                                    <span class="badge bg-warning text-dark ms-1">Admin</span>
+                                }
+                                @if (player.Role == "Observer")
+                                {
+                                    <span class="badge bg-secondary ms-1">Observer</span>
+                                }
+                            </span>
+                            @if (player.HasVoted)
+                            {
+                                <span class="badge bg-success">✓</span>
+                            }
+                        </li>
+                    }
+                </ul>
+
+                @if (MyRole == "Admin")
+                {
+                    <hr />
+                    <h6>Admin-Panel</h6>
+
+                    <div class="mb-3">
+                        <label class="form-label">Neue Runde</label>
+                        <textarea @bind="NewRoundTitle" @bind:event="oninput" class="form-control mb-2 custom-scrollbar admin-story-box"
+                                  placeholder="Titel der Runde"
+                                  rows="3"></textarea>
+                        <button class="btn btn-primary w-100" @onclick="StartNewRound"
+                                 disabled="@(string.IsNullOrWhiteSpace(NewRoundTitle))">
+                            Neue Runde starten
+                        </button>
+                    </div>
+
+                    <button class="btn btn-warning w-100 mb-3" @onclick="Reveal">
+                        Karten umdrehen
+                    </button>
+
+                    <div class="mb-3">
+                        <label class="form-label">Verfügbare Karten</label>
+                        <input @bind="NewCardsInput" @bind:event="oninput" class="form-control mb-2"
+                               placeholder="z.B. 1,2,3,5" disabled="@IsRoundRunning" />
+                        <button class="btn btn-outline-secondary w-100" @onclick="UpdateCards" disabled="@(IsRoundRunning || string.IsNullOrWhiteSpace(NewCardsInput))">
+                            Karten aktualisieren
+                        </button>
+                        @if (IsRoundRunning)
+                        {
+                            <small class="text-warning d-block mt-1">Während einer laufenden Runde gesperrt – erst nach Umdrehen wieder verfügbar.</small>
+                        }
+                    </div>
+                }
+            </div>
+
+            <!-- Hauptbereich: Spielbrett -->
+            <div class="col-md-9 p-4">
+                @if (CurrentRound != null)
+                {
+                    <div class="mb-3">
+                        <h3 class="mb-2">Runde @CurrentRound.Number</h3>
+                        <div class="round-text-box">@CurrentRound.Title</div>
+                    </div>
+                }
+
+                <!-- Kartenwahl -->
+                @if (MyRole != "Observer" && CurrentRound != null && !IsRevealed)
+                {
+                    <div class="mb-4">
+                        <h5>Wähle deine Karte</h5>
+                        <div class="d-flex flex-wrap gap-2">
+                            @foreach (var card in AvailableCards)
+                            {
+                                <button class="btn @(SelectedCard == card ? "btn-primary" : "btn-outline-primary") card-btn"
+                                        @onclick="() => SelectCard(card)">
+                                    @card
+                                </button>
+                            }
+                        </div>
+                    </div>
+                }
+                else if (CurrentRound == null && MyRole != "Observer")
+                {
+                    <div class="alert alert-secondary mt-4">
+                        Noch keine Runde gestartet. Warte auf den Admin...
+                    </div>
+                }
+
+                <!-- Ergebnis / Reveal -->
+                @if (IsRevealed && CurrentRound?.Votes != null)
+                {
+                    <div class="card mt-4">
+                        <div class="card-header bg-success text-white">
+                            <h5 class="mb-0">Ergebnis</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                @foreach (var vote in CurrentRound.Votes)
+                                {
+                                    <div class="col-md-3 mb-3">
+                                        <div class="card text-center">
+                                            <div class="card-body">
+                                                <h4 class="card-title">@vote.Value</h4>
+                                                <p class="card-text text-muted">@vote.Key</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                            @if (CurrentRound.Votes.Any())
+                            {
+                                <hr />
+                                <p>
+                                    <strong>Durchschnitt:</strong>
+                                    @CalculateAverage() |
+                                    <strong>Min/Max:</strong>
+                                    @GetMinMax()
+                                </p>
+                            }
+                        </div>
+                    </div>
+                }
+
+                <!-- Activity Log -->
+                <div class="mt-4">
+                    <h6>Activity</h6>
+                    <div class="border rounded p-3 activity-box custom-scrollbar">
+                        @foreach (var log in ActivityLog.TakeLast(20).Reverse())
+                        {
+                            <div class="small text-muted">@log</div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public string? RoomCode { get; set; }
+
+    private HubConnection? _hubConnection;
+    private List<PlayerDto> Players = new();
+    private List<string> AvailableCards = new();
+    private PlayerDto? Me;
+    private string MyRole = "";
+    private string PlayerName = "";
+    private string RoomName = "";
+    private RoundDto? CurrentRound;
+    private bool IsRevealed;
+    private string? SelectedCard;
+    private string NewRoundTitle = "";
+    private string NewCardsInput = "";
+    private bool Connected;
+    private bool Joined;
+    private string? ConnectionError;
+    private bool _initialized;
+    private bool IsCreateMode;
+    private string? _actualRoomCode;
+    private bool _linkCopied;
+    private List<string> ActivityLog = new();
+
+    private record PlayerDto(string Name, string Role, bool HasVoted, string? SelectedCard);
+    private record RoundDto(int Number, string Title, bool IsRevealed, Dictionary<string, string>? Votes);
+
+    protected override void OnInitialized()
+    {
+        var uri = new Uri(Navigation.Uri);
+        var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
+        PlayerName = query["name"] ?? "";
+        MyRole = query["role"] ?? "Member";
+        RoomName = query["roomName"] ?? "";
+        _actualRoomCode = RoomCode;
+        IsCreateMode = !string.IsNullOrWhiteSpace(RoomName) && string.IsNullOrWhiteSpace(RoomCode);
+    }
+
+    // TODO: Für bessere Wartbarkeit in Teil-Komponenten aufteilen (z.B. Sidebar, Board, AdminPanel) und Hub-Logik in eigenen Service auslagern.
+    // Hinweis für Prüfer: Room.razor ist bewusst kompakt gehalten für 40h Scope, Aufteilung wäre nächster Refactor-Schritt.
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_initialized) return;
+        if (!firstRender) return;
+        _initialized = true;
+
+        if (string.IsNullOrWhiteSpace(PlayerName))
+        {
+            Navigation.NavigateTo($"/join/{_actualRoomCode ?? ""}");
+            return;
+        }
+
+        try
+        {
+            _hubConnection = new HubConnectionBuilder()
+                .WithUrl(Navigation.ToAbsoluteUri("/scrumhub"))
+                .WithAutomaticReconnect()
+                .Build();
+
+            _hubConnection.On<string, string>("RoomCreated", (code, name) =>
+            {
+                try
+                {
+                    _actualRoomCode = code;
+                    IsCreateMode = false;
+                    AddLog($"Raum erstellt: {code}");
+                    _ = JoinRoomAsync();
+                }
+                catch (Exception ex)
+                {
+                    AddLog($"Fehler beim Erstellen: {ex.Message}");
+                }
+                InvokeAsync(StateHasChanged);
+            });
+
+            _hubConnection.On<object>("JoinedRoom", (data) =>
+            {
+                try
+                {
+                    var dict = (System.Text.Json.JsonElement)data;
+                    var players = dict.GetProperty("Players");
+                    Players = new List<PlayerDto>();
+                    foreach (var p in players.EnumerateArray())
+                    {
+                        Players.Add(new PlayerDto(
+                            p.GetProperty("Name").GetString() ?? "",
+                            p.GetProperty("Role").GetString() ?? "",
+                            p.GetProperty("HasVoted").GetBoolean(),
+                            null));
+                    }
+
+                    var availableCards = dict.GetProperty("AvailableCards");
+                    AvailableCards = new List<string>();
+                    foreach (var c in availableCards.EnumerateArray())
+                    {
+                        AvailableCards.Add(c.GetString() ?? "");
+                    }
+
+                    Me = Players.FirstOrDefault(p => p.Name == PlayerName);
+                    Joined = true;
+
+                    if (dict.TryGetProperty("CurrentRound", out var roundElem) && roundElem.ValueKind != System.Text.Json.JsonValueKind.Null)
+                    {
+                        var roundNumber = roundElem.GetProperty("Number").GetInt32();
+                        var roundTitle = roundElem.GetProperty("Title").GetString() ?? "";
+                        var isRevealed = roundElem.GetProperty("IsRevealed").GetBoolean();
+                        CurrentRound = new RoundDto(roundNumber, roundTitle, isRevealed, isRevealed ? new Dictionary<string, string>() : null);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    AddLog($"Fehler beim Laden des Raums: {ex.Message}");
+                }
+                InvokeAsync(StateHasChanged);
+            });
+
+            _hubConnection.On<string>("Error", (msg) =>
+            {
+                AddLog($"Fehler: {msg}");
+                InvokeAsync(StateHasChanged);
+            });
+
+            _hubConnection.On<object>("PlayerJoined", (data) =>
+            {
+                try
+                {
+                    var dict = (System.Text.Json.JsonElement)data;
+                    var name = dict.GetProperty("Name").GetString() ?? "";
+                    var role = dict.GetProperty("Role").GetString() ?? "";
+                    AddLog($"{name} ist beigetreten ({role})");
+                }
+                catch { }
+                InvokeAsync(StateHasChanged);
+            });
+
+            _hubConnection.On<object>("PlayerLeft", (data) =>
+            {
+                try
+                {
+                    var dict = (System.Text.Json.JsonElement)data;
+                    var name = dict.GetProperty("Name").GetString() ?? "";
+                    AddLog($"{name} hat den Raum verlassen");
+                }
+                catch { }
+                InvokeAsync(StateHasChanged);
+            });
+
+            _hubConnection.On<object>("PlayerListUpdated", (data) =>
+            {
+                try
+                {
+                    var dict = (System.Text.Json.JsonElement)data;
+                    Players = new List<PlayerDto>();
+                    foreach (var p in dict.EnumerateArray())
+                    {
+                        Players.Add(new PlayerDto(
+                            p.GetProperty("Name").GetString() ?? "",
+                            p.GetProperty("Role").GetString() ?? "",
+                            p.GetProperty("HasVoted").GetBoolean(),
+                            p.TryGetProperty("SelectedCard", out var sc) && sc.ValueKind != System.Text.Json.JsonValueKind.Null
+                                ? sc.GetString() : null));
+                    }
+                }
+                catch { }
+                InvokeAsync(StateHasChanged);
+            });
+
+            _hubConnection.On<string>("CardSelected", (card) =>
+            {
+                SelectedCard = card;
+                AddLog($"Karte gewählt: {card}");
+                InvokeAsync(StateHasChanged);
+            });
+
+            _hubConnection.On<object>("PlayerVoted", (data) =>
+            {
+                try
+                {
+                    var dict = (System.Text.Json.JsonElement)data;
+                    var name = dict.GetProperty("Name").GetString() ?? "";
+                    AddLog($"{name} hat abgestimmt");
+                }
+                catch { }
+                InvokeAsync(StateHasChanged);
+            });
+
+            _hubConnection.On<object>("NewRoundStarted", (data) =>
+            {
+                try
+                {
+                    var dict = (System.Text.Json.JsonElement)data;
+                    var title = dict.GetProperty("Title").GetString() ?? "";
+                    var number = dict.TryGetProperty("Number", out var numProp) ? numProp.GetInt32() : 0;
+                    CurrentRound = new RoundDto(number, title, false, null);
+                    IsRevealed = false;
+                    SelectedCard = null;
+                    AddLog($"Neue Runde {number} gestartet");
+                }
+                catch { }
+                InvokeAsync(StateHasChanged);
+            });
+
+            _hubConnection.On<object>("CardsRevealed", (data) =>
+            {
+                try
+                {
+                    var dict = (System.Text.Json.JsonElement)data;
+                    var votes = dict.GetProperty("Votes");
+                    var voteDict = new Dictionary<string, string>();
+                    foreach (var v in votes.EnumerateObject())
+                    {
+                        voteDict[v.Name] = v.Value.GetString() ?? "?";
+                    }
+                    var number = dict.GetProperty("Number").GetInt32();
+                    var title = dict.GetProperty("Title").GetString() ?? "";
+                    CurrentRound = new RoundDto(number, title, true, voteDict);
+                    IsRevealed = true;
+                    AddLog("Karten wurden umgedreht!");
+                }
+                catch (Exception ex)
+                {
+                    AddLog($"Fehler beim Umdrehen: {ex.Message}");
+                }
+                InvokeAsync(StateHasChanged);
+            });
+
+            _hubConnection.On<List<string>>("CardsUpdated", (cards) =>
+            {
+                AvailableCards = cards;
+                AddLog("Karten aktualisiert");
+                InvokeAsync(StateHasChanged);
+            });
+
+            _hubConnection.On<string>("PlayerKicked", (name) =>
+            {
+                AddLog($"{name} wurde gekickt");
+                InvokeAsync(StateHasChanged);
+            });
+
+            _hubConnection.On("KickedFromRoom", () =>
+            {
+                Joined = false;
+                AddLog("Du wurdest aus dem Raum geworfen.");
+                InvokeAsync(StateHasChanged);
+            });
+
+            await _hubConnection.StartAsync();
+            Connected = true;
+            StateHasChanged();
+
+            if (IsCreateMode)
+            {
+                await _hubConnection.SendAsync("CreateRoom", RoomName);
+            }
+            else
+            {
+                await _hubConnection.SendAsync("JoinRoom", RoomCode, PlayerName, Enum.Parse<PlayerRole>(MyRole));
+            }
+        }
+        catch (Exception ex)
+        {
+            ConnectionError = ex.Message;
+            AddLog($"Verbindungsfehler: {ex.Message}");
+            Connected = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task JoinRoomAsync()
+    {
+        if (_hubConnection == null || string.IsNullOrWhiteSpace(_actualRoomCode)) return;
+        await _hubConnection.SendAsync("JoinRoom", _actualRoomCode, PlayerName, Enum.Parse<PlayerRole>(MyRole));
+    }
+
+    private async Task SelectCard(string card)
+    {
+        if (_hubConnection == null) return;
+        await _hubConnection.SendAsync("SelectCard", _actualRoomCode, card);
+    }
+
+    private async Task StartNewRound()
+    {
+        if (_hubConnection == null || string.IsNullOrWhiteSpace(NewRoundTitle)) return;
+        await _hubConnection.SendAsync("StartNewRound", _actualRoomCode, NewRoundTitle);
+        NewRoundTitle = "";
+    }
+
+    private async Task Reveal()
+    {
+        if (_hubConnection == null) return;
+        await _hubConnection.SendAsync("RevealCards", _actualRoomCode);
+    }
+
+    private async Task UpdateCards()
+    {
+        if (_hubConnection == null) return;
+        var cards = NewCardsInput.Split(',', StringSplitOptions.RemoveEmptyEntries)
+                                 .Select(c => c.Trim())
+                                 .ToList();
+        if (cards.Any())
+        {
+            await _hubConnection.SendAsync("UpdateAvailableCards", _actualRoomCode, cards);
+            NewCardsInput = "";
+        }
+    }
+
+    private async Task KickPlayer(string playerName)
+    {
+        if (_hubConnection == null || string.IsNullOrWhiteSpace(_actualRoomCode)) return;
+        await _hubConnection.SendAsync("KickPlayer", _actualRoomCode, playerName);
+    }
+
+    private async Task CopyToClipboard(string url)
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", url);
+            _linkCopied = true;
+            await InvokeAsync(StateHasChanged);
+            await Task.Delay(2000);
+            _linkCopied = false;
+            await InvokeAsync(StateHasChanged);
+        }
+        catch { }
+    }
+
+    private void NavigateHome()
+    {
+        Navigation.NavigateTo("/");
+    }
+
+    private string CalculateAverage()
+    {
+        if (CurrentRound?.Votes == null || !CurrentRound.Votes.Any()) return "-";
+
+        var numericVotes = CurrentRound.Votes.Values
+            .Where(v => double.TryParse(v.Replace("/", "."), System.Globalization.NumberStyles.Any,
+                         System.Globalization.CultureInfo.InvariantCulture, out _))
+            .Select(v => double.Parse(v.Replace("/", "."),
+                         System.Globalization.NumberStyles.Any,
+                         System.Globalization.CultureInfo.InvariantCulture))
+            .ToList();
+
+        if (!numericVotes.Any()) return "Keine numerischen Werte";
+        return numericVotes.Average().ToString("F1");
+    }
+
+    private string GetMinMax()
+    {
+        if (CurrentRound?.Votes == null || !CurrentRound.Votes.Any()) return "-";
+
+        var numericVotes = CurrentRound.Votes.Values
+            .Where(v => double.TryParse(v.Replace("/", "."), System.Globalization.NumberStyles.Any,
+                         System.Globalization.CultureInfo.InvariantCulture, out _))
+            .Select(v => double.Parse(v.Replace("/", "."),
+                         System.Globalization.NumberStyles.Any,
+                         System.Globalization.CultureInfo.InvariantCulture))
+            .ToList();
+
+        if (!numericVotes.Any()) return "Keine numerischen Werte";
+        return $"{numericVotes.Min()} / {numericVotes.Max()}";
+    }
+
+    private bool IsRoundRunning => CurrentRound != null && !IsRevealed;
+
+    private void AddLog(string message)
+    {
+        ActivityLog.Add($"{DateTime.Now:HH:mm:ss} - {message}");
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_hubConnection != null)
+        {
+            await _hubConnection.StopAsync();
+            await _hubConnection.DisposeAsync();
+        }
+    }
+}

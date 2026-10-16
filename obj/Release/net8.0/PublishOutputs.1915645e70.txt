@@ -1,0 +1,10 @@
+C:\Users\user\source\repos\Scrum-Poker-V1\bin\Release\net8.0\publish\Scrum_Poker_V1.exe
+C:\Users\user\source\repos\Scrum-Poker-V1\bin\Release\net8.0\publish\appsettings.Development.json
+C:\Users\user\source\repos\Scrum-Poker-V1\bin\Release\net8.0\publish\appsettings.json
+C:\Users\user\source\repos\Scrum-Poker-V1\bin\Release\net8.0\publish\Scrum_Poker_V1.dll
+C:\Users\user\source\repos\Scrum-Poker-V1\bin\Release\net8.0\publish\Scrum_Poker_V1.deps.json
+C:\Users\user\source\repos\Scrum-Poker-V1\bin\Release\net8.0\publish\Scrum_Poker_V1.runtimeconfig.json
+C:\Users\user\source\repos\Scrum-Poker-V1\bin\Release\net8.0\publish\Scrum_Poker_V1.pdb
+C:\Users\user\source\repos\Scrum-Poker-V1\bin\Release\net8.0\publish\Microsoft.AspNetCore.Http.Connections.Client.dll
+C:\Users\user\source\repos\Scrum-Poker-V1\bin\Release\net8.0\publish\Microsoft.AspNetCore.SignalR.Client.dll
+C:\Users\user\source\repos\Scrum-Poker-V1\bin\Release\net8.0\publish\Microsoft.AspNetCore.SignalR.Client.Core.dll

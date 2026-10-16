@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Scrum_Poker_V1</RootNamespace>
+    <AssemblyName>Scrum_Poker_V1</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="Scrum-Poker-V1.Tests/**" />
+    <Content Remove="Scrum-Poker-V1.Tests/**" />
+    <EmbeddedResource Remove="Scrum-Poker-V1.Tests/**" />
+    <None Remove="Scrum-Poker-V1.Tests/**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="8.0.0" />
+  </ItemGroup>
+
+</Project>

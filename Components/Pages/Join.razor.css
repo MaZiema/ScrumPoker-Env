@@ -1,0 +1,21 @@
+::deep .card {
+    max-width: 500px;
+    width: 100%;
+    margin: 0 auto;
+}
+
+::deep .btn-secondary {
+    background-color: #4a5568;
+    border-color: #4a5568;
+    color: #ffffff;
+}
+
+::deep .btn-success {
+    font-weight: 700;
+}
+
+::deep .alert-danger {
+    background-color: rgba(229, 0, 0, 0.15);
+    border-color: rgba(229, 0, 0, 0.3);
+    color: #ff6b6b;
+}

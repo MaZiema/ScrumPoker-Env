@@ -1,0 +1,12 @@
+{
+  "version": 2,
+  "dgSpecHash": "khDmqOlu1/U=",
+  "success": true,
+  "projectFilePath": "C:\\Users\\user\\source\\repos\\Scrum Poker Env\\ScrumPoker-Env\\Scrum-Poker-V1.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\user\\.nuget\\packages\\microsoft.aspnetcore.http.connections.client\\8.0.0\\microsoft.aspnetcore.http.connections.client.8.0.0.nupkg.sha512",
+    "C:\\Users\\user\\.nuget\\packages\\microsoft.aspnetcore.signalr.client\\8.0.0\\microsoft.aspnetcore.signalr.client.8.0.0.nupkg.sha512",
+    "C:\\Users\\user\\.nuget\\packages\\microsoft.aspnetcore.signalr.client.core\\8.0.0\\microsoft.aspnetcore.signalr.client.core.8.0.0.nupkg.sha512"
+  ],
+  "logs": []
+}

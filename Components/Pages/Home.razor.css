@@ -1,0 +1,8 @@
+::deep .card {
+    max-width: 500px;
+    width: 100%;
+}
+
+::deep .card-title {
+    white-space: nowrap;
+}

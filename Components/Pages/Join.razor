@@ -1,0 +1,114 @@
+@page "/join/{RoomCode}"
+@rendermode InteractiveServer
+@inject NavigationManager Navigation
+@using Scrum_Poker_V1.Services
+@inject RoomService RoomService
+
+<PageTitle>Raum beitreten</PageTitle>
+
+<div class="container-fluid">
+    @if (!RoomFound && string.IsNullOrEmpty(ErrorMessage))
+    {
+        <div class="card">
+            <div class="card-body text-center">
+                <div class="spinner-border text-primary mb-3" role="status">
+                    <span class="visually-hidden">Laden...</span>
+                </div>
+                <p>Raum wird geladen...</p>
+            </div>
+        </div>
+    }
+    else if (!string.IsNullOrEmpty(ErrorMessage))
+    {
+        <div class="card">
+            <div class="card-body text-center">
+                <div class="alert alert-danger">@ErrorMessage</div>
+                <button class="btn btn-outline-secondary" @onclick='() => Navigation.NavigateTo("/")'>Zur Startseite</button>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="card">
+            <div class="card-body">
+                <h2 class="card-title text-center mb-4">Raum beitreten</h2>
+
+                @if (!string.IsNullOrEmpty(ErrorMessage))
+                {
+                    <div class="alert alert-danger">@ErrorMessage</div>
+                }
+
+                <div class="mb-3">
+                    <label class="form-label">Raum-Code</label>
+                    <input @bind="RoomCodeDisplay" class="form-control" disabled />
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Dein Name</label>
+                    <input @bind="PlayerName" @bind:event="oninput" class="form-control" maxlength="12"
+                           placeholder="Name" />
+                </div>
+
+                <div class="mb-4">
+                    <label class="form-label">Rolle</label>
+                    <div class="d-flex gap-2">
+                        <button class="btn @(SelectedRole == PlayerRole.Member ? "btn-primary" : "btn-outline-primary") flex-fill"
+                                @onclick="() => SelectedRole = PlayerRole.Member">
+                            Member
+                        </button>
+                        <button class="btn @(SelectedRole == PlayerRole.Observer ? "btn-secondary" : "btn-outline-secondary") flex-fill"
+                                @onclick="() => SelectedRole = PlayerRole.Observer">
+                            Observer
+                        </button>
+                    </div>
+                    <small class="text-muted">
+                        Member: Kann Karten spielen<br />
+                        Observer: Nur beobachten
+                    </small>
+                </div>
+
+                <button class="btn btn-success btn-lg w-100" @onclick="JoinRoom"
+                        disabled="@(string.IsNullOrWhiteSpace(PlayerName))">
+                    Beitreten
+                </button>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public string RoomCode { get; set; } = "";
+
+    private string RoomCodeDisplay = "";
+    private string PlayerName = "";
+    private PlayerRole SelectedRole = PlayerRole.Member;
+    private bool RoomFound;
+    private string? ErrorMessage;
+
+    protected override void OnInitialized()
+    {
+        RoomCodeDisplay = RoomCode.ToUpper();
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (firstRender)
+        {
+            var room = RoomService.GetRoom(RoomCodeDisplay);
+            RoomFound = room != null;
+            if (room == null)
+            {
+                ErrorMessage = "Raum nicht gefunden. Bitte prüfe den Code.";
+                RoomFound = false;
+            }
+            StateHasChanged();
+        }
+    }
+
+    private void JoinRoom()
+    {
+        if (string.IsNullOrWhiteSpace(PlayerName)) return;
+
+        Navigation.NavigateTo($"/room/{RoomCodeDisplay}?name={Uri.EscapeDataString(PlayerName.Trim())}&role={SelectedRole}");
+    }
+}
